@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import { GoogleGenAI, Modality } from "@google/genai";
-import { AspectRatio, ComplexityLevel, VisualStyle, ResearchResult, SearchResultItem, Language } from "../types";
+import { AspectRatio, ComplexityLevel, VisualStyle, ResearchResult, SearchResultItem, Language, ImageResolution } from "../types";
 
 // Create a fresh client for every request to ensure the latest API key from process.env.API_KEY is used
 const getAi = () => {
@@ -134,7 +134,7 @@ export const researchTopicForPrompt = async (
   };
 };
 
-export const generateInfographicImage = async (prompt: string): Promise<string> => {
+export const generateInfographicImage = async (prompt: string, aspectRatio: AspectRatio, resolution: ImageResolution): Promise<string> => {
   // Use Gemini 3 Pro Image Preview for generation
   const response = await getAi().models.generateContent({
     model: IMAGE_MODEL,
@@ -143,6 +143,10 @@ export const generateInfographicImage = async (prompt: string): Promise<string> 
     },
     config: {
       responseModalities: [Modality.IMAGE],
+      imageConfig: {
+        aspectRatio: aspectRatio,
+        imageSize: resolution
+      }
     }
   });
 

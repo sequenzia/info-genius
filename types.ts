@@ -2,7 +2,9 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-export type AspectRatio = '16:9' | '9:16' | '1:1';
+export type AspectRatio = '1:1' | '2:3' | '3:2' | '3:4' | '4:3' | '9:16' | '16:9' | '21:9';
+
+export type ImageResolution = '1K' | '2K' | '4K';
 
 export type ComplexityLevel = 'Elementary' | 'High School' | 'College' | 'Expert';
 
@@ -18,6 +20,8 @@ export interface GeneratedImage {
   level?: ComplexityLevel;
   style?: VisualStyle;
   language?: Language;
+  aspectRatio?: AspectRatio;
+  resolution?: ImageResolution;
 }
 
 export interface SearchResultItem {

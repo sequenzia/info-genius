@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import React, { useState, useEffect, useRef } from 'react';
-import { GeneratedImage, ComplexityLevel, VisualStyle, Language, SearchResultItem } from './types';
+import { GeneratedImage, ComplexityLevel, VisualStyle, Language, SearchResultItem, AspectRatio, ImageResolution } from './types';
 import { 
   researchTopicForPrompt, 
   generateInfographicImage, 
@@ -13,15 +13,24 @@ import Infographic from './components/Infographic';
 import Loading from './components/Loading';
 import IntroScreen from './components/IntroScreen';
 import SearchResults from './components/SearchResults';
-import { Search, AlertCircle, History, GraduationCap, Palette, Microscope, Atom, Compass, Globe, Sun, Moon, Key, CreditCard, ExternalLink, DollarSign, FileText, X, Plus, Upload, Link } from 'lucide-react';
+import { Search, AlertCircle, History, GraduationCap, Palette, Atom, Compass, Globe, Sun, Moon, Key, CreditCard, ExternalLink, DollarSign, FileText, X, Plus, Upload, Link, LayoutTemplate, Zap, Rocket } from 'lucide-react';
+
+interface ContextSource {
+  id: string;
+  type: 'file' | 'url';
+  name: string;
+  content: string;
+}
 
 const App: React.FC = () => {
   const [showIntro, setShowIntro] = useState(true);
   const [topic, setTopic] = useState('');
-  // Aspect ratio is now hardcoded to 16:9 in the service calls
+  
   const [complexityLevel, setComplexityLevel] = useState<ComplexityLevel>('Expert');
   const [visualStyle, setVisualStyle] = useState<VisualStyle>('Default');
   const [language, setLanguage] = useState<Language>('English');
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('16:9');
+  const [resolution, setResolution] = useState<ImageResolution>('1K');
   
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
@@ -33,8 +42,8 @@ const App: React.FC = () => {
   const [currentSearchResults, setCurrentSearchResults] = useState<SearchResultItem[]>([]);
   const [isDarkMode, setIsDarkMode] = useState(true);
 
-  // Context Source State (File or URL)
-  const [contextSource, setContextSource] = useState<{type: 'file' | 'url', name: string, content: string} | null>(null);
+  // Context Source State (Array of Files or URLs)
+  const [contextSources, setContextSources] = useState<ContextSource[]>([]);
   const [showContextOptions, setShowContextOptions] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [urlInputValue, setUrlInputValue] = useState('');
@@ -87,27 +96,34 @@ const App: React.FC = () => {
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    // Check size limit (e.g. 1MB) to prevent huge payloads
-    if (file.size > 1024 * 1024) {
-        setError("File size too large. Please upload a file smaller than 1MB.");
-        return;
+    // Check size limit (e.g. 1MB per file) to prevent huge payloads
+    for (let i = 0; i < files.length; i++) {
+        if (files[i].size > 1024 * 1024) {
+            setError(`File "${files[i].name}" is too large. Please upload files smaller than 1MB.`);
+            e.target.value = ''; // Reset input
+            return;
+        }
     }
     
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      setContextSource({ type: 'file', name: file.name, content });
-      setError(null);
-      setShowContextOptions(false);
-    };
-    reader.onerror = () => {
-        setError("Failed to read file.");
-    };
-    reader.readAsText(file);
-    // Reset input
+    Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const content = event.target?.result as string;
+          setContextSources(prev => [...prev, { 
+              id: Math.random().toString(36).substr(2, 9),
+              type: 'file', 
+              name: file.name, 
+              content 
+          }]);
+        };
+        reader.readAsText(file);
+    });
+
+    setError(null);
+    setShowContextOptions(false);
     e.target.value = ''; 
   };
 
@@ -115,15 +131,21 @@ const App: React.FC = () => {
     e.preventDefault();
     if (!urlInputValue.trim()) return;
     
-    setContextSource({ type: 'url', name: urlInputValue, content: urlInputValue });
+    setContextSources(prev => [...prev, { 
+        id: Math.random().toString(36).substr(2, 9),
+        type: 'url', 
+        name: urlInputValue, 
+        content: urlInputValue 
+    }]);
+
     setUrlInputValue('');
     setShowUrlInput(false);
     setShowContextOptions(false);
     setError(null);
   };
 
-  const removeContextSource = () => {
-      setContextSource(null);
+  const removeContextSource = (id: string) => {
+      setContextSources(prev => prev.filter(source => source.id !== id));
   };
 
   const handleGenerate = async (e: React.FormEvent) => {
@@ -131,7 +153,7 @@ const App: React.FC = () => {
     if (isLoading) return;
 
     // Modified validation: allow empty topic if context exists
-    if (!topic.trim() && !contextSource) {
+    if (!topic.trim() && contextSources.length === 0) {
         setError("Please enter a topic or provide context (File/URL) to visualize.");
         return;
     }
@@ -145,18 +167,21 @@ const App: React.FC = () => {
 
     // Prepare context string
     let contextData = null;
-    if (contextSource) {
-        if (contextSource.type === 'file') {
-            contextData = `SOURCE (File: ${contextSource.name}):\n${contextSource.content}`;
-        } else {
-            contextData = `SOURCE (URL: ${contextSource.content}):\nPlease visit this URL to gather relevant context.`;
-        }
+    if (contextSources.length > 0) {
+        contextData = contextSources.map((source, index) => {
+            if (source.type === 'file') {
+                return `SOURCE ${index + 1} (File: ${source.name}):\n${source.content}`;
+            } else {
+                return `SOURCE ${index + 1} (URL: ${source.content}):\nPlease visit this URL to gather relevant context.`;
+            }
+        }).join('\n\n---\n\n');
     }
 
     // Determine effective topic for research
     let effectiveTopic = topic.trim();
-    if (!effectiveTopic && contextSource) {
-        effectiveTopic = `Create a comprehensive infographic visualizing the key concepts from the ${contextSource.type === 'file' ? 'uploaded file' : 'provided URL'} (${contextSource.name}).`;
+    if (!effectiveTopic && contextSources.length > 0) {
+        const sourceNames = contextSources.map(s => s.name).join(', ');
+        effectiveTopic = `Create a comprehensive infographic visualizing the key concepts from the provided sources (${sourceNames}).`;
     }
 
     try {
@@ -176,7 +201,7 @@ const App: React.FC = () => {
       setLoadingMessage(`Designing Infographic...`);
       
       // Step 2: Direct Image Generation
-      let base64Data = await generateInfographicImage(researchResult.imagePrompt);
+      let base64Data = await generateInfographicImage(researchResult.imagePrompt, aspectRatio, resolution);
       
       const newImage: GeneratedImage = {
         id: Date.now().toString(),
@@ -185,7 +210,9 @@ const App: React.FC = () => {
         timestamp: Date.now(),
         level: complexityLevel,
         style: visualStyle,
-        language: language
+        language: language,
+        aspectRatio: aspectRatio,
+        resolution: resolution
       };
 
       setImageHistory([newImage, ...imageHistory]);
@@ -221,7 +248,9 @@ const App: React.FC = () => {
         timestamp: Date.now(),
         level: currentImage.level,
         style: currentImage.style,
-        language: currentImage.language
+        language: currentImage.language,
+        aspectRatio: currentImage.aspectRatio,
+        resolution: currentImage.resolution
       };
       setImageHistory([newImage, ...imageHistory]);
     } catch (err: any) {
@@ -442,7 +471,7 @@ const App: React.FC = () => {
                             type="text"
                             value={topic}
                             onChange={(e) => setTopic(e.target.value)}
-                            placeholder={contextSource ? "Describe specific focus (optional)..." : "What do you want to visualize?"}
+                            placeholder={contextSources.length > 0 ? "Describe specific focus (optional)..." : "What do you want to visualize?"}
                             className="w-full pl-12 md:pl-16 pr-12 md:pr-14 py-3 md:py-6 bg-transparent border-none outline-none text-base md:text-2xl placeholder:text-slate-400 font-medium text-slate-900 dark:text-white"
                         />
                         {/* Context Button */}
@@ -487,29 +516,32 @@ const App: React.FC = () => {
                                 onChange={handleFileUpload}
                                 accept=".md,.txt,.markdown"
                                 className="hidden"
+                                multiple
                             />
                         </div>
                     </div>
 
-                    {/* Context Source Pill */}
-                    {contextSource && (
-                        <div className="px-4 pb-2 animate-in slide-in-from-top-2 fade-in">
-                            <div className="inline-flex items-center gap-2 bg-cyan-50 dark:bg-cyan-900/20 text-cyan-700 dark:text-cyan-300 px-3 py-1.5 rounded-lg text-xs font-bold border border-cyan-200 dark:border-cyan-700/50 shadow-sm max-w-full">
-                                {contextSource.type === 'file' ? (
-                                    <FileText className="w-3.5 h-3.5 flex-shrink-0" />
-                                ) : (
-                                    <Link className="w-3.5 h-3.5 flex-shrink-0" />
-                                )}
-                                <span className="truncate max-w-[200px] md:max-w-xs">{contextSource.name}</span>
-                                <button 
-                                    type="button" 
-                                    onClick={removeContextSource} 
-                                    className="ml-1 p-0.5 hover:bg-cyan-200 dark:hover:bg-cyan-800 rounded-full transition-colors"
-                                    title="Remove context"
-                                >
-                                    <X className="w-3.5 h-3.5" />
-                                </button>
-                            </div>
+                    {/* Context Source Pills */}
+                    {contextSources.length > 0 && (
+                        <div className="px-4 pb-2 animate-in slide-in-from-top-2 fade-in flex flex-wrap gap-2 max-h-[100px] overflow-y-auto">
+                            {contextSources.map((source) => (
+                                <div key={source.id} className="inline-flex items-center gap-2 bg-cyan-50 dark:bg-cyan-900/20 text-cyan-700 dark:text-cyan-300 px-3 py-1.5 rounded-lg text-xs font-bold border border-cyan-200 dark:border-cyan-700/50 shadow-sm max-w-full">
+                                    {source.type === 'file' ? (
+                                        <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+                                    ) : (
+                                        <Link className="w-3.5 h-3.5 flex-shrink-0" />
+                                    )}
+                                    <span className="truncate max-w-[150px]">{source.name}</span>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => removeContextSource(source.id)} 
+                                        className="ml-1 p-0.5 hover:bg-cyan-200 dark:hover:bg-cyan-800 rounded-full transition-colors"
+                                        title="Remove context"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            ))}
                         </div>
                     )}
 
@@ -586,6 +618,49 @@ const App: React.FC = () => {
                         </div>
                     </div>
 
+                     {/* Aspect Ratio Selector */}
+                     <div className="flex-1 bg-slate-50 dark:bg-slate-950/50 rounded-2xl border border-slate-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 hover:border-pink-500/30 transition-colors relative overflow-hidden group/item">
+                         <div className="p-2 bg-white dark:bg-slate-800 rounded-lg text-pink-600 dark:text-pink-400 shrink-0 shadow-sm">
+                            <LayoutTemplate className="w-4 h-4" />
+                        </div>
+                        <div className="flex flex-col z-10 w-full overflow-hidden">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Format</label>
+                            <select 
+                                value={aspectRatio} 
+                                onChange={(e) => setAspectRatio(e.target.value as AspectRatio)}
+                                className="bg-transparent border-none text-base font-bold text-slate-900 dark:text-slate-100 focus:ring-0 cursor-pointer p-0 w-full hover:text-pink-600 dark:hover:text-pink-300 transition-colors truncate pr-4 [&>option]:bg-white [&>option]:text-slate-900 dark:[&>option]:bg-slate-900 dark:[&>option]:text-slate-100"
+                            >
+                                <option value="1:1">Square (1:1)</option>
+                                <option value="16:9">Widescreen (16:9)</option>
+                                <option value="9:16">Mobile (9:16)</option>
+                                <option value="4:3">Standard (4:3)</option>
+                                <option value="3:4">Portrait (3:4)</option>
+                                <option value="3:2">Landscape (3:2)</option>
+                                <option value="2:3">Tall (2:3)</option>
+                                <option value="21:9">Cinema (21:9)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Resolution Selector */}
+                    <div className="flex-1 bg-slate-50 dark:bg-slate-950/50 rounded-2xl border border-slate-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 hover:border-amber-500/30 transition-colors relative overflow-hidden group/item">
+                         <div className="p-2 bg-white dark:bg-slate-800 rounded-lg text-amber-600 dark:text-amber-400 shrink-0 shadow-sm">
+                            <Zap className="w-4 h-4" />
+                        </div>
+                        <div className="flex flex-col z-10 w-full overflow-hidden">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quality</label>
+                            <select 
+                                value={resolution} 
+                                onChange={(e) => setResolution(e.target.value as ImageResolution)}
+                                className="bg-transparent border-none text-base font-bold text-slate-900 dark:text-slate-100 focus:ring-0 cursor-pointer p-0 w-full hover:text-amber-600 dark:hover:text-amber-300 transition-colors truncate pr-4 [&>option]:bg-white [&>option]:text-slate-900 dark:[&>option]:bg-slate-900 dark:[&>option]:text-slate-100"
+                            >
+                                <option value="1K">1K (Fast)</option>
+                                <option value="2K">2K (High)</option>
+                                <option value="4K">4K (Ultra)</option>
+                            </select>
+                        </div>
+                    </div>
+
                     {/* Generate Button */}
                     <div className="flex flex-col gap-1 w-full md:w-auto">
                         <button
@@ -593,12 +668,9 @@ const App: React.FC = () => {
                             disabled={isLoading}
                             className="w-full md:w-auto h-full bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-8 py-4 rounded-2xl font-bold font-display tracking-wide hover:brightness-110 transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] whitespace-nowrap flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                         >
-                            <Microscope className="w-5 h-5" />
+                            <Rocket className="w-5 h-5" />
                             <span>INITIATE</span>
                         </button>
-                        <div className="text-center">
-                            <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider opacity-70">16:9 Format</span>
-                        </div>
                     </div>
 
                     </div>
@@ -655,6 +727,7 @@ const App: React.FC = () => {
                                 <p className="text-xs text-white font-bold truncate mb-1 font-display">{img.prompt}</p>
                                 <div className="flex gap-2">
                                     {img.level && <span className="text-[9px] text-cyan-100 uppercase font-bold tracking-wide px-1.5 py-0.5 rounded-full bg-cyan-900/60 border border-cyan-500/20">{img.level}</span>}
+                                    {img.resolution && <span className="text-[9px] text-amber-100 uppercase font-bold tracking-wide px-1.5 py-0.5 rounded-full bg-amber-900/60 border border-amber-500/20">{img.resolution}</span>}
                                 </div>
                             </div>
                         </div>
