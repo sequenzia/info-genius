@@ -13,7 +13,7 @@ import Infographic from './components/Infographic';
 import Loading from './components/Loading';
 import IntroScreen from './components/IntroScreen';
 import SearchResults from './components/SearchResults';
-import { Search, AlertCircle, History, GraduationCap, Palette, Atom, Compass, Globe, Sun, Moon, Key, CreditCard, ExternalLink, DollarSign, FileText, X, Plus, Upload, Link, LayoutTemplate, Zap, Rocket } from 'lucide-react';
+import { Search, AlertCircle, History, GraduationCap, Palette, Atom, Compass, Globe, Sun, Moon, Key, CreditCard, ExternalLink, DollarSign, FileText, X, Plus, Upload, Link, LayoutTemplate, Zap, Rocket, PlusCircle } from 'lucide-react';
 
 interface ContextSource {
   id: string;
@@ -93,6 +93,25 @@ const App: React.FC = () => {
         console.error("Failed to open key selector:", e);
       }
     }
+  };
+
+  const handleNewSession = () => {
+    if (imageHistory.length > 0 && !window.confirm("Start a new session? This will clear your current results and history.")) {
+      return;
+    }
+    setTopic('');
+    setContextSources([]);
+    setImageHistory([]);
+    setCurrentSearchResults([]);
+    setComplexityLevel('Expert');
+    setVisualStyle('Default');
+    setLanguage('English');
+    setAspectRatio('16:9');
+    setResolution('1K');
+    setError(null);
+    setLoadingFacts([]);
+    setLoadingStep(0);
+    setLoadingMessage('');
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -417,6 +436,17 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
+              {imageHistory.length > 0 && (
+                <button 
+                  onClick={handleNewSession}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-colors shadow-sm shadow-cyan-500/20 mr-2"
+                  title="Start New Session"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span className="hidden md:inline">New Session</span>
+                </button>
+              )}
+
               <button 
                 onClick={handleSelectKey}
                 className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-cyan-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 text-xs font-medium transition-colors border border-slate-200 dark:border-white/10"
