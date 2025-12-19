@@ -11,7 +11,6 @@ import {
 } from './services/geminiService';
 import Infographic from './components/Infographic';
 import Loading from './components/Loading';
-import IntroScreen from './components/IntroScreen';
 import SearchResults from './components/SearchResults';
 import { Search, AlertCircle, History, GraduationCap, Palette, Atom, Compass, Globe, Sun, Moon, Key, CreditCard, ExternalLink, DollarSign, FileText, X, Plus, Upload, Link, LayoutTemplate, Zap, Rocket, PlusCircle } from 'lucide-react';
 
@@ -23,7 +22,6 @@ interface ContextSource {
 }
 
 const App: React.FC = () => {
-  const [showIntro, setShowIntro] = useState(true);
   const [topic, setTopic] = useState('');
   
   const [complexityLevel, setComplexityLevel] = useState<ComplexityLevel>('Expert');
@@ -358,7 +356,7 @@ const App: React.FC = () => {
         <div className="fixed inset-0" onClick={() => setShowUrlInput(false)}></div>
         <form 
             onSubmit={handleUrlSubmit}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md p-6 relative overflow-hidden z-10"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl w-full max-md p-6 relative overflow-hidden z-10"
         >
             <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                 <Link className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
@@ -405,9 +403,6 @@ const App: React.FC = () => {
     {/* URL Input Modal */}
     {showUrlInput && <UrlInputModal />}
 
-    {showIntro ? (
-      <IntroScreen onComplete={() => setShowIntro(false)} />
-    ) : (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 font-sans selection:bg-cyan-500 selection:text-white pb-20 relative overflow-x-hidden animate-in fade-in duration-1000 transition-colors">
       
       {/* Background Elements */}
@@ -768,7 +763,6 @@ const App: React.FC = () => {
 
       </main>
     </div>
-    )}
     </>
   );
 };
