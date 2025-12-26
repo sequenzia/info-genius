@@ -1,8 +1,9 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { AspectRatio, ComplexityLevel, VisualStyle, ResearchResult, SearchResultItem, Language, ImageResolution } from "../types";
 
 // Create a fresh client for every request to ensure the latest API key from process.env.API_KEY is used
@@ -10,7 +11,7 @@ const getAi = () => {
   return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
-// Updated to use 'gemini-3-pro-image-preview' for all operations including search grounding and image generation as requested
+// Updated to use 'gemini-3-pro-preview' for complex text and 'gemini-3-pro-image-preview' for high-quality image operations as requested
 const TEXT_MODEL = 'gemini-3-pro-preview';
 const IMAGE_MODEL = 'gemini-3-pro-image-preview';
 const EDIT_MODEL = 'gemini-3-pro-image-preview';
@@ -142,7 +143,6 @@ export const generateInfographicImage = async (prompt: string, aspectRatio: Aspe
       parts: [{ text: prompt }]
     },
     config: {
-      responseModalities: [Modality.IMAGE],
       imageConfig: {
         aspectRatio: aspectRatio,
         imageSize: resolution
@@ -150,9 +150,11 @@ export const generateInfographicImage = async (prompt: string, aspectRatio: Aspe
     }
   });
 
-  const part = response.candidates?.[0]?.content?.parts?.[0];
-  if (part && part.inlineData && part.inlineData.data) {
-    return `data:image/png;base64,${part.inlineData.data}`;
+  // Fix: Iterate through parts to find the image part, do not assume it is the first part.
+  for (const part of response.candidates?.[0]?.content?.parts || []) {
+    if (part.inlineData && part.inlineData.data) {
+      return `data:image/png;base64,${part.inlineData.data}`;
+    }
   }
   throw new Error("Failed to generate image");
 };
@@ -189,15 +191,14 @@ export const fixInfographicImage = async (currentImageBase64: string, correction
         { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } },
         { text: prompt }
       ]
-    },
-    config: {
-      responseModalities: [Modality.IMAGE],
     }
   });
 
-  const part = response.candidates?.[0]?.content?.parts?.[0];
-  if (part && part.inlineData && part.inlineData.data) {
-    return `data:image/png;base64,${part.inlineData.data}`;
+  // Fix: Iterate through parts to find the image part.
+  for (const part of response.candidates?.[0]?.content?.parts || []) {
+    if (part.inlineData && part.inlineData.data) {
+      return `data:image/png;base64,${part.inlineData.data}`;
+    }
   }
   throw new Error("Failed to fix image");
 };
@@ -212,15 +213,14 @@ export const editInfographicImage = async (currentImageBase64: string, editInstr
          { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } },
          { text: editInstruction }
       ]
-    },
-    config: {
-      responseModalities: [Modality.IMAGE],
     }
   });
   
-   const part = response.candidates?.[0]?.content?.parts?.[0];
-  if (part && part.inlineData && part.inlineData.data) {
-    return `data:image/png;base64,${part.inlineData.data}`;
+  // Fix: Iterate through parts to find the image part.
+  for (const part of response.candidates?.[0]?.content?.parts || []) {
+    if (part.inlineData && part.inlineData.data) {
+      return `data:image/png;base64,${part.inlineData.data}`;
+    }
   }
   throw new Error("Failed to edit image");
 };
