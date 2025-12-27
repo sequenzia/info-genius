@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -9,7 +10,6 @@ import {
   generateInfographicImage, 
   editInfographicImage,
 } from './services/geminiService';
-import { uploadToGCS } from './services/storageService';
 import Infographic from './components/Infographic';
 import Loading from './components/Loading';
 import SearchResults from './components/SearchResults';
@@ -20,17 +20,6 @@ interface ContextSource {
   type: 'file' | 'url';
   name: string;
   content: string;
-}
-
-interface KeySelectionModalProps {
-  onSelect: () => void;
-}
-
-interface UrlInputModalProps {
-  url: string;
-  onChange: (val: string) => void;
-  onCancel: () => void;
-  onSubmit: (e: React.FormEvent) => void;
 }
 
 const STORAGE_KEY = 'infogenius_history_v1';
@@ -115,7 +104,6 @@ const App: React.FC = () => {
     checkKey();
   }, []);
 
-  // Fix: assume key selection was successful after triggering openSelectKey to mitigate race condition
   const handleSelectKey = async () => {
     if (window.aistudio && window.aistudio.openSelectKey) {
       try {
@@ -148,6 +136,7 @@ const App: React.FC = () => {
     }
   };
 
+  // Fix: Explicitly cast FileList to File array to fix unknown property/argument errors on lines 157 and 161
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -267,10 +256,6 @@ const App: React.FC = () => {
 
       setImageHistory(prev => [newImage, ...prev]);
       setActiveImageId(newImageId);
-      
-      // Automatic background upload to Google Cloud Storage
-      uploadToGCS(base64Data, newImageId);
-      
     } catch (err: any) {
       console.error(err);
       if (err.message && (err.message.includes("Requested entity was not found") || err.message.includes("404") || err.message.includes("403"))) {
@@ -311,10 +296,6 @@ const App: React.FC = () => {
       };
       setImageHistory(prev => [newImage, ...prev]);
       setActiveImageId(newImageId);
-      
-      // Automatic background upload to Google Cloud Storage for edited versions
-      uploadToGCS(base64Data, newImageId);
-      
     } catch (err: any) {
       console.error(err);
       if (err.message && (err.message.includes("Requested entity was not found") || err.message.includes("404") || err.message.includes("403"))) {
@@ -330,21 +311,12 @@ const App: React.FC = () => {
   };
 
   const activeImage = imageHistory.find(img => img.id === activeImageId);
+  const archivedImages = imageHistory.filter(img => img.id !== activeImageId);
 
   return (
     <>
-    {/* KeySelectionModal: pass handler to trigger "assume success" logic */}
-    {!checkingKey && !hasApiKey && <KeySelectionModal onSelect={handleSelectKey} />}
-    
-    {/* UrlInputModal: wire up state and cancellation handler */}
-    {showUrlInput && (
-        <UrlInputModal 
-            url={urlInputValue} 
-            onChange={setUrlInputValue} 
-            onCancel={() => setShowUrlInput(false)}
-            onSubmit={handleUrlSubmit}
-        />
-    )}
+    {!checkingKey && !hasApiKey && <KeySelectionModal />}
+    {showUrlInput && <UrlInputModal />}
 
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 font-sans selection:bg-cyan-500 selection:text-white pb-20 relative overflow-x-hidden animate-in fade-in duration-1000 transition-colors">
       
@@ -534,13 +506,15 @@ const App: React.FC = () => {
                          <div className="p-2 bg-white dark:bg-slate-800 rounded-lg text-pink-600 dark:text-pink-400 shrink-0 shadow-sm"><LayoutTemplate className="w-4 h-4" /></div>
                         <div className="flex flex-col z-10 w-full overflow-hidden">
                             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Format</label>
-                            {/* Fix: limit aspect ratio options to those supported by the Gemini model */}
                             <select value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value as AspectRatio)} className="bg-transparent border-none text-base font-bold text-slate-900 dark:text-slate-100 focus:ring-0 cursor-pointer p-0 w-full truncate pr-4">
                                 <option value="1:1">Square (1:1)</option>
                                 <option value="16:9">Widescreen (16:9)</option>
                                 <option value="9:16">Mobile (9:16)</option>
                                 <option value="4:3">Standard (4:3)</option>
                                 <option value="3:4">Portrait (3:4)</option>
+                                <option value="3:2">Landscape (3:2)</option>
+                                <option value="2:3">Tall (2:3)</option>
+                                <option value="21:9">Cinema (21:9)</option>
                             </select>
                         </div>
                     </div>
@@ -637,7 +611,7 @@ const App: React.FC = () => {
   );
 };
 
-const KeySelectionModal: React.FC<KeySelectionModalProps> = ({ onSelect }) => (
+const KeySelectionModal = () => (
     <div className="fixed inset-0 z-[200] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
         <div className="bg-white dark:bg-slate-900 border-2 border-amber-500/50 rounded-2xl shadow-2xl max-w-md w-full p-6 md:p-8 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500"></div>
@@ -650,41 +624,25 @@ const KeySelectionModal: React.FC<KeySelectionModalProps> = ({ onSelect }) => (
                 <div className="space-y-3">
                     <h2 className="text-2xl font-display font-bold text-slate-900 dark:text-white">Paid API Key Required</h2>
                     <p className="text-slate-600 dark:text-slate-300 text-sm">This app uses premium Gemini models. Standard API keys will fail.</p>
-                    {/* Fix: add a link to the billing documentation as per Gemini requirements */}
-                    <a 
-                      href="https://ai.google.dev/gemini-api/docs/billing" 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      className="inline-flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 hover:underline font-bold"
-                    >
-                      Gemini API Billing Docs <ExternalLink className="w-3 h-3" />
-                    </a>
                 </div>
-                <button onClick={onSelect} className="w-full py-3.5 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-xl font-bold">Select Paid API Key</button>
+                <button onClick={() => window.aistudio.openSelectKey()} className="w-full py-3.5 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-xl font-bold">Select Paid API Key</button>
             </div>
         </div>
     </div>
 );
 
-const UrlInputModal: React.FC<UrlInputModalProps> = ({ url, onChange, onCancel, onSubmit }) => (
+const UrlInputModal = () => (
     <div className="fixed inset-0 z-[60] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <form onSubmit={onSubmit} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md p-6 relative overflow-hidden z-10">
+        <form className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-md p-6 relative overflow-hidden z-10">
             <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                 <Link className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
                 Add Link Context
             </h3>
             <div className="space-y-4">
-                <input 
-                  type="url" 
-                  value={url}
-                  onChange={(e) => onChange(e.target.value)}
-                  placeholder="https://example.com" 
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-cyan-500/50" 
-                  required
-                />
+                <input type="url" placeholder="https://example.com" className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3" />
                 <div className="flex gap-3">
-                    <button type="button" onClick={onCancel} className="flex-1 px-4 py-2.5 rounded-xl text-slate-600 dark:text-slate-400 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancel</button>
-                    <button type="submit" className="flex-1 px-4 py-2.5 rounded-xl bg-cyan-600 text-white font-bold hover:bg-cyan-500 transition-colors">Add Link</button>
+                    <button type="button" className="flex-1 px-4 py-2.5 rounded-xl text-slate-600 font-bold">Cancel</button>
+                    <button type="submit" className="flex-1 px-4 py-2.5 rounded-xl bg-cyan-600 text-white font-bold">Add Link</button>
                 </div>
             </div>
         </form>
